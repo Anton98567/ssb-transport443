@@ -63,14 +63,17 @@ curl -fsSL https://raw.githubusercontent.com/Anton98567/ssb-transport443/main/in
 curl -fsSL https://raw.githubusercontent.com/Anton98567/ssb-transport443/main/install.sh | bash
 ```
 
-Флаги: `--apply`, `--order ORDER-…`, `--count N` (1…50), `--out out-…`
+Флаги: `--apply`, `--order ORDER-…` (`auto` = номер из hostname, `123456` тоже
+принимается), `--count N` (1…50), `--out out-…`
 (по умолчанию `out-<номер заказа>`), `--schemes both|grpc|xhttp`, `--name <база>`,
-`--status`, `--help`.
+`--ticket N` (отправить конфиги в тикет; `auto` = из `/root/to_send.txt`),
+`--with-ws`, `--status`, `--help`.
 
 Ставит:
 
 * `/usr/local/bin/ssb-transport443-patch` — включить/выключить/проверить схему;
 * `/usr/local/bin/ssb-transport443-add` — выдача конфигов заказа;
+* `/usr/local/bin/ssb-transport443-ticket` — отправка ссылок в тикет биллинга;
 * `/usr/local/share/ssb-transport443/tpl.json` — клиентский шаблон (та же
   маршрутизация, что в боевом `template.json` ноды).
 
@@ -119,6 +122,52 @@ ssb-transport443-patch remove
 В правило `ip_cidr` клиентского конфига подставляется реальный IP ноды (резолв
 домена в момент генерации) — это пиннинг против DNS-спуфинга. Если домен не
 резолвится, пиннинг просто отключается, а не ломает конфиг.
+
+## Отправка в тикет
+
+`sing_box_ticket.sh` отправляет в тикет ws-конфиги. Конфиги 443-транспортов
+отправляются отдельной командой — в тот же тикет:
+
+```bash
+# номер тикета явно
+ssb-transport443-ticket 1234567
+
+# номер тикета из /root/to_send.txt (его пишет штатный sing_box_ticket.sh)
+ssb-transport443-ticket auto
+
+# показать, что уйдёт, без отправки
+ssb-transport443-ticket 1234567 --dry-run
+
+# добавить к 443-ссылкам ещё и ws-ссылки
+ssb-transport443-ticket 1234567 --with-ws
+```
+
+Полезная нагрузка — только чистые URL по одному в строке (как в штатном
+скрипте, чтобы сторона биллинга разобрала их так же), порядок: пользователь 1
+и его 4 ссылки (TRJ-GRPC, VLESS-GRPC, TRJ-XHTTP, VLESS-XHTTP), пользователь 2 и
+т.д. Источник — `links-by-user.txt` последнего заказа (или конкретного при
+`--order ORDER-…`). Запрос уходит тем же API, что и штатный скрипт
+(`installtype=sing_box_t_install`, `orderid=hostname -s`), поэтому принимается
+только с IP сервера заказа.
+
+URL API тикетов в репозиторий не вшит: передать его переменной окружения
+`SSB_TICKET_URL='<url биллинга>'` либо положить строкой `SSB_TICKET_URL=...`
+в `/etc/ssb-transport443.env` — тогда команда работает без переменных.
+
+Формат с заголовками-разделителями (`--labels`) — только для чтения человеком,
+по умолчанию выключен.
+
+Ограничение: это GET-запрос, у веб-сервера биллинга есть предел длины URL.
+На 40 ссылках запрос занимает ~6,5 тыс. символов (норма). Если больше — скрипт
+остановится и подскажет варианты (`--schemes grpc|xhttp`, меньше `--count`);
+отправить всё равно можно флагом `--force`.
+
+Разово всё (включая отправку) одной командой:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Anton98567/ssb-transport443/main/install.sh \
+  | SSB_TICKET_URL='<url биллинга>' bash -s -- --apply --order auto --count 10 --name user --ticket auto
+```
 
 ## Политика OUT
 
