@@ -15,7 +15,7 @@
 #
 # Флаги (все необязательные):
 #   --apply                 сразу включить gRPC+XHTTP на 443 (patch apply)
-#   --order ORDER-123456    сразу выдать конфиги заказа
+#   --order ORDER-123456    сразу выдать конфиги заказа (auto = номер из hostname)
 #   --count N               число конфигов, 1..50 (по умолчанию 10)
 #   --out out-123456        персональный OUT (по умолчанию out-<номер заказа>)
 #   --schemes both|grpc|xhttp   какие транспорты выдавать (по умолчанию both)
@@ -40,7 +40,7 @@ ssb-transport443 — gRPC и XHTTP на 443 для ноды SSB.
 
 Флаги (все необязательные):
   --apply                 сразу включить gRPC+XHTTP на 443 (patch apply)
-  --order ORDER-123456    сразу выдать конфиги заказа
+  --order ORDER-123456    сразу выдать конфиги заказа (auto = номер из hostname)
   --count N               число конфигов, 1..50 (по умолчанию 10)
   --out out-123456        персональный OUT (по умолчанию out-<номер заказа>)
   --schemes both|grpc|xhttp   какие транспорты выдавать (по умолчанию both)
@@ -69,6 +69,14 @@ done
 
 SCHEMES="${SCHEMES:-both}"
 case "$SCHEMES" in both|grpc|xhttp) ;; *) echo "Ошибка: --schemes both|grpc|xhttp" >&2; exit 1 ;; esac
+# --order auto  -> ORDER-<номер из hostname> (у SSB-нод hostname = номер заказа, напр. 137072)
+if [[ $ORDER == auto ]]; then
+    h=$(hostname -s 2>/dev/null | grep -oE '^[0-9]+' || true)
+    [[ -n $h ]] || { echo "Ошибка: --order auto — в hostname нет номера, укажи --order ORDER-123456" >&2; exit 1; }
+    ORDER="ORDER-$h"
+fi
+# --order 123456 -> ORDER-123456
+[[ -n $ORDER && $ORDER =~ ^[0-9]+$ ]] && ORDER="ORDER-$ORDER"
 if [[ -n $ORDER && ! $ORDER =~ ^ORDER-[0-9]+$ ]]; then
     echo "Ошибка: заказ в формате ORDER-<цифры> (например ORDER-123456)" >&2; exit 1
 fi
