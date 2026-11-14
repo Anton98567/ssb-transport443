@@ -156,29 +156,38 @@ PY
 add_inbounds() {
     local seed_u seed_p seed_id
     seed_u="seed-$(rand)"; seed_p="$(rand)$(rand)"; seed_id=$(cat /proc/sys/kernel/random/uuid)
+    # ВАЖНО: повторный apply не должен терять пользователей уже выданных заказов,
+    # поэтому users существующего инбаунда переносятся как есть; seed — только
+    # если пользователей ещё нет.
     jq --arg u "$seed_u" --arg p "$seed_p" --arg id "$seed_id" \
        --arg t1 "$T_TRJ_GRPC" --arg t2 "$T_VLESS_GRPC" --arg t3 "$T_TRJ_XHTTP" --arg t4 "$T_VLESS_XHTTP" \
        --argjson p1 "$P_TRJ_GRPC" --argjson p2 "$P_VLESS_GRPC" --argjson p3 "$P_TRJ_XHTTP" --argjson p4 "$P_VLESS_XHTTP" '
-      .inbounds = ((.inbounds // []) | map(select((.tag // "") | test("-443$") | not)))
-      | .inbounds += [
-          {type:"trojan", tag:$t1, listen:"127.0.0.1", listen_port:$p1,
-           users:[{name:$u, password:$p}],
-           transport:{type:"grpc", service_name:"trj"}},
-          {type:"vless", tag:$t2, listen:"127.0.0.1", listen_port:$p2,
-           users:[{name:$u, uuid:$id}],
-           transport:{type:"grpc", service_name:"vless"}},
-          {type:"trojan", tag:$t3, listen:"127.0.0.1", listen_port:$p3,
-           users:[{name:$u, password:$p}],
-           transport:{type:"http", path:"/trj-xhttp"}},
-          {type:"vless", tag:$t4, listen:"127.0.0.1", listen_port:$p4,
-           users:[{name:$u, uuid:$id}],
-           transport:{type:"http", path:"/vless-xhttp"}}
-        ]' "$SBCFG" > /tmp/t443.$$.json || return 1
+      . as $doc
+      | ($doc.inbounds // []) as $ib
+      | def keep_users($tag; $fallback):
+            ([ $ib[] | select(.tag == $tag) | .users ][0]) as $old
+            | if (($old // []) | length) > 0 then $old else $fallback end;
+        .inbounds = ([ $ib[] | select(.tag as $x | ($x == $t1 or $x == $t2 or $x == $t3 or $x == $t4) | not) ]
+        + [
+            {type:"trojan", tag:$t1, listen:"127.0.0.1", listen_port:$p1,
+             users:keep_users($t1; [{name:$u, password:$p}]),
+             transport:{type:"grpc", service_name:"trj"}},
+            {type:"vless", tag:$t2, listen:"127.0.0.1", listen_port:$p2,
+             users:keep_users($t2; [{name:$u, uuid:$id}]),
+             transport:{type:"grpc", service_name:"vless"}},
+            {type:"trojan", tag:$t3, listen:"127.0.0.1", listen_port:$p3,
+             users:keep_users($t3; [{name:$u, password:$p}]),
+             transport:{type:"http", path:"/trj-xhttp"}},
+            {type:"vless", tag:$t4, listen:"127.0.0.1", listen_port:$p4,
+             users:keep_users($t4; [{name:$u, uuid:$id}]),
+             transport:{type:"http", path:"/vless-xhttp"}}
+          ])' "$SBCFG" > /tmp/t443.$$.json || return 1
     mv /tmp/t443.$$.json "$SBCFG"
 }
 
 remove_inbounds() {
-    jq 'if has("inbounds") then .inbounds |= map(select((.tag // "") | test("-443$") | not)) else . end' \
+    jq --arg t1 "$T_TRJ_GRPC" --arg t2 "$T_VLESS_GRPC" --arg t3 "$T_TRJ_XHTTP" --arg t4 "$T_VLESS_XHTTP" \
+        'if has("inbounds") then .inbounds |= map(select(.tag as $x | ($x == $t1 or $x == $t2 or $x == $t3 or $x == $t4) | not)) else . end' \
         "$SBCFG" > /tmp/t443.$$.json || return 1
     mv /tmp/t443.$$.json "$SBCFG"
 }
