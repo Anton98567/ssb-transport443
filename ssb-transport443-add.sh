@@ -270,10 +270,26 @@ lv_xhttp=$(mk_links "$links_xhttp")
 printf '%s\n%s\n' "$lv_grpc" "$lv_xhttp" | sed '/^$/d' > "${OUTDIR}/links-all.txt"
 chmod 600 "${OUTDIR}/links-all.txt"
 
+# --- выдача по пользователям: один блок = один клиент (все его транспорты) ---
+by_user=""
+n=0
+for name in "${names[@]}"; do
+    n=$((n + 1))
+    by_user+="Пользователь ${n} — ${name}"$'\n'
+    for kind in TRJ-GRPC VLESS-GRPC TRJ-XHTTP VLESS-XHTTP; do
+        f="${name}-${kind}-CLIENT.json"
+        [[ -f "${OUTDIR}/${f}" ]] && by_user+="$(printf '  %-11s ' "$kind")${base}/${f}"$'\n'
+    done
+    by_user+=$'\n'
+done
+printf '%s' "$by_user" > "${OUTDIR}/links-by-user.txt"
+chmod 600 "${OUTDIR}/links-by-user.txt"
+
 echo "$(date '+%F %T') order=${ORDER} transport443-add count=${COUNT} schemes=${SCHEMES} out=${OUT}" >> /root/ssb-orders.log
 
-if [[ -n $lv_grpc ]]; then echo; echo "=== gRPC на 443 ==="; printf '%s\n' "$lv_grpc"; fi
-if [[ -n $lv_xhttp ]]; then echo; echo "=== XHTTP на 443 ==="; printf '%s\n' "$lv_xhttp"; fi
+if [[ -n $lv_grpc || -n $lv_xhttp ]]; then echo; printf '%s' "$by_user"; fi
 echo
 echo "=== Итого: $(wc -l < "${OUTDIR}/links-all.txt" | tr -d ' ') файлов; маршрут: ${ORDER} -> ${OUT} ==="
-echo "Файлы и список для тикета: ${OUTDIR}/ (links-all.txt)"
+echo "Файлы: ${OUTDIR}/"
+echo "  links-by-user.txt — ссылки по пользователям (для выдачи клиенту)"
+echo "  links-all.txt     — плоский список (для тикета)"
