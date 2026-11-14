@@ -37,9 +37,35 @@ Hiddify, SFA/SFI, sing-box CLI). Если нужен именно Xray-XHTTP с 
 
 ## Установка
 
+Одна строка — поставить, включить gRPC+XHTTP на 443 и выдать конфиги заказа:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Anton98567/ssb-transport443/main/install.sh \
+  | bash -s -- --apply --order ORDER-123456 --count 10 --out out-123456
+```
+
+Оба транспорта (gRPC и XHTTP) выдаются по умолчанию — это 10 × 2 файла × 2 протокола
+(TRJ+VLESS) = 40 конфигов. Нужен только один транспорт:
+
+```bash
+# только gRPC
+curl -fsSL https://raw.githubusercontent.com/Anton98567/ssb-transport443/main/install.sh \
+  | bash -s -- --apply --order ORDER-123456 --schemes grpc
+
+# только XHTTP (HTTP/2)
+curl -fsSL https://raw.githubusercontent.com/Anton98567/ssb-transport443/main/install.sh \
+  | bash -s -- --apply --order ORDER-123456 --schemes xhttp
+```
+
+Только поставить скрипты, без изменений в ноде:
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Anton98567/ssb-transport443/main/install.sh | bash
 ```
+
+Флаги: `--apply`, `--order ORDER-…`, `--count N` (1…50), `--out out-…`
+(по умолчанию `out-<номер заказа>`), `--schemes both|grpc|xhttp`, `--name <база>`,
+`--status`, `--help`.
 
 Ставит:
 

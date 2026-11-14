@@ -1,19 +1,77 @@
 #!/bin/bash
 # install.sh — установка ssb-transport443 (gRPC и XHTTP на 443) на ноду SSB.
 #
+# Минимум (только поставить скрипты):
 #   curl -fsSL https://raw.githubusercontent.com/Anton98567/ssb-transport443/main/install.sh | bash
 #
+# Всё одной командой (поставить + включить на 443 + выдать конфиги заказа):
+#   curl -fsSL https://raw.githubusercontent.com/Anton98567/ssb-transport443/main/install.sh \
+#     | bash -s -- --apply --order ORDER-123456 --count 10 --out out-123456
+#
 # Ставит:
-#   /usr/local/bin/ssb-transport443-patch     (apply | remove | status)
-#   /usr/local/bin/ssb-transport443-add       (выдача конфигов заказа)
+#   /usr/local/bin/ssb-transport443-patch      (apply | remove | status)
+#   /usr/local/bin/ssb-transport443-add        (выдача конфигов заказа)
 #   /usr/local/share/ssb-transport443/tpl.json (шаблон клиента: прод-маршрутизация)
+#
+# Флаги (все необязательные):
+#   --apply                 сразу включить gRPC+XHTTP на 443 (patch apply)
+#   --order ORDER-123456    сразу выдать конфиги заказа
+#   --count N               число конфигов, 1..50 (по умолчанию 10)
+#   --out out-123456        персональный OUT (по умолчанию out-<номер заказа>)
+#   --schemes both|grpc|xhttp   какие транспорты выдавать (по умолчанию both)
+#   --name <база>           база имени конфигов (латиница/цифры/_/-, до 32)
+#   --status                показать состояние после установки
+#   -h | --help             эта справка
 set -euo pipefail
 
-RAW="https://raw.githubusercontent.com/Anton98567/ssb-transport443/main"
-BIN=/usr/local/bin
-SHARE=/usr/local/share/ssb-transport443
+RAW="${SSB_T443_RAW:-https://raw.githubusercontent.com/Anton98567/ssb-transport443/main}"
+BIN="${SSB_T443_BIN:-/usr/local/bin}"
+SHARE="${SSB_T443_SHARE:-/usr/local/share/ssb-transport443}"
+
+APPLY=0; STATUS=0; ORDER=""; COUNT=""; OUT=""; SCHEMES=""; NAME=""
+
+usage() {
+    cat <<'EOF'
+ssb-transport443 — gRPC и XHTTP на 443 для ноды SSB.
+
+  curl -fsSL https://raw.githubusercontent.com/Anton98567/ssb-transport443/main/install.sh | bash
+  curl -fsSL https://raw.githubusercontent.com/Anton98567/ssb-transport443/main/install.sh \
+    | bash -s -- --apply --order ORDER-123456 --count 10 --out out-123456
+
+Флаги (все необязательные):
+  --apply                 сразу включить gRPC+XHTTP на 443 (patch apply)
+  --order ORDER-123456    сразу выдать конфиги заказа
+  --count N               число конфигов, 1..50 (по умолчанию 10)
+  --out out-123456        персональный OUT (по умолчанию out-<номер заказа>)
+  --schemes both|grpc|xhttp   какие транспорты выдавать (по умолчанию both)
+  --name <база>           база имени конфигов (латиница/цифры/_/-, до 32)
+  --status                показать состояние после установки
+  -h | --help             эта справка
+EOF
+}
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --apply)   APPLY=1 ;;
+        --status)  STATUS=1 ;;
+        --order)   ORDER="${2:-}"; shift ;;
+        --count)   COUNT="${2:-}"; shift ;;
+        --out)     OUT="${2:-}"; shift ;;
+        --schemes) SCHEMES="${2:-}"; shift ;;
+        --name)    NAME="${2:-}"; shift ;;
+        -h|--help) usage; exit 0 ;;
+        *) echo "Неизвестный аргумент: $1 (см. --help)" >&2; exit 1 ;;
+    esac
+    shift
+done
 
 [[ $EUID -eq 0 ]] || { echo "нужен root" >&2; exit 1; }
+
+SCHEMES="${SCHEMES:-both}"
+case "$SCHEMES" in both|grpc|xhttp) ;; *) echo "Ошибка: --schemes both|grpc|xhttp" >&2; exit 1 ;; esac
+if [[ -n $ORDER && ! $ORDER =~ ^ORDER-[0-9]+$ ]]; then
+    echo "Ошибка: заказ в формате ORDER-<цифры> (например ORDER-123456)" >&2; exit 1
+fi
 
 # если запускаем из каталога репозитория — берём файлы локально
 SRC=""
@@ -42,7 +100,33 @@ echo "Установлено:"
 echo "  $BIN/ssb-transport443-patch"
 echo "  $BIN/ssb-transport443-add"
 echo "  $SHARE/tpl.json"
-echo
-echo "Дальше:"
-echo "  1) ssb-transport443-patch apply        # gRPC+XHTTP на 443"
-echo "  2) ssb-transport443-add ORDER-123456 10 out-123456"
+
+if (( APPLY )); then
+    echo
+    echo "== включаю gRPC+XHTTP на 443 =="
+    "$BIN/ssb-transport443-patch" apply
+fi
+
+if [[ -n $ORDER ]]; then
+    echo
+    echo "== выдаю конфиги заказа =="
+    COUNT="${COUNT:-10}"
+    # по умолчанию — персональный OUT с именем out-<номер заказа>
+    OUT="${OUT:-out-${ORDER#ORDER-}}"
+    args=("$ORDER" "$COUNT" "$OUT")
+    [[ -n $NAME ]] && args+=("name=$NAME")
+    SCHEMES="${SCHEMES:-both}" "$BIN/ssb-transport443-add" "${args[@]}"
+fi
+
+if (( STATUS )); then
+    echo
+    "$BIN/ssb-transport443-patch" status
+fi
+
+if (( ! APPLY )) && [[ -z $ORDER ]]; then
+    echo
+    echo "Дальше:"
+    echo "  1) ssb-transport443-patch apply        # gRPC+XHTTP на 443"
+    echo "  2) ssb-transport443-add ORDER-123456 10 out-123456"
+    echo "  либо всё сразу:  ... install.sh | bash -s -- --apply --order ORDER-123456 --out out-123456"
+fi
