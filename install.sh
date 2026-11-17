@@ -143,8 +143,11 @@ if [[ -n $TICKET ]]; then
     fi
     if [[ $TICKET == auto ]]; then
         to_send="${SSB_TICKET_FILE:-/root/to_send.txt}"
-        [[ -f $to_send ]] || { echo "Ошибка: --ticket auto — нет $to_send (номер тикета пишет sing_box_ticket.sh)" >&2; exit 1; }
-        TICKET=$(tr -d '[:space:]' < "$to_send")
+        if [[ -f $to_send ]]; then
+            TICKET=$(tr -d '[:space:]' < "$to_send")
+        else
+            read -r -p "Номер тикета: " TICKET
+        fi
     fi
     echo
     echo "== отправляю конфиги в тикет $TICKET =="

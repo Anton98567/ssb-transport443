@@ -40,12 +40,26 @@ while [[ $# -gt 0 ]]; do
     shift
 done
 
-if [[ -z $TICKET && -f ${SSB_TICKET_FILE:-/root/to_send.txt} ]]; then
-    TICKET=$(tr -d '[:space:]' < "${SSB_TICKET_FILE:-/root/to_send.txt}")
+TO_SEND="${SSB_TICKET_FILE:-/root/to_send.txt}"
+
+# --ticket auto → номер из /root/to_send.txt
+if [[ $TICKET == auto ]]; then
+    if [[ -f $TO_SEND ]]; then
+        TICKET=$(tr -d '[:space:]' < "$TO_SEND")
+    else
+        read -r -p "Номер тикета: " TICKET
+    fi
 fi
+
+# если номер не передан вообще — попробовать файл, иначе спросить
 if [[ -z $TICKET ]]; then
-    read -r -p "Номер тикета: " TICKET
+    if [[ -f $TO_SEND ]]; then
+        TICKET=$(tr -d '[:space:]' < "$TO_SEND")
+    else
+        read -r -p "Номер тикета: " TICKET
+    fi
 fi
+
 [[ $TICKET =~ ^[0-9]+$ ]] || { echo "Ошибка: номер тикета должен быть числом (получено '$TICKET')" >&2; exit 1; }
 
 OUTROOT=${SSB_T443_OUTROOT:-/root/ssb-transport443-out}
